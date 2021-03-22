@@ -1,0 +1,12 @@
+<configuration>
+    <values>
+        <value name="language" value="en" />
+        <value name="face_search" value="true" />
+    </values>
+
+    <paths>
+        <path name="temp_microphone_storage" value="Audio/{audio_id}.mp3" />
+        <path name="video_output_location" value="Video/{directory}/{timestamp}.avi" />
+        <path name="know_face_encodings" value="FaceSet" />
+    </paths>
+</configuration>
