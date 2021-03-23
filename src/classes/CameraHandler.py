@@ -7,9 +7,9 @@ class CameraHandler:
 
     __devices: Union = []
 
-    def __init__(self, config):
+    def __init__(self):
         for i in range(0, 1):
-            self.__devices.append(src.devices.Webcam(target_id=i, config=config))
+            self.__devices.append(src.devices.Webcam(target_id=i))
 
     def toggleTracking(self):
         for device in self.__devices:

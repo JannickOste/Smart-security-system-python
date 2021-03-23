@@ -8,6 +8,8 @@ from gtts import gTTS
 import playsound
 from os import listdir, path, remove
 
+from src.Configuration import Configuration
+
 
 class Audio:
     """
@@ -18,10 +20,7 @@ class Audio:
     __phase_time_limit = 0
     __audio_proc = None
 
-    __config = None
-
-    def __init__(self, config) -> None:
-        self.__config = config
+    def __init__(self) -> None:
         """
         Assign the speech recognition object and start the audio handling thread
         """
@@ -30,9 +29,9 @@ class Audio:
         __audio_proc.start()
 
         # Remove stragglers to avoid corruption exceptions
-        temp_storage_dir = path.dirname(self.__config.GetFilePath("temp_microphone_storage"))
+        temp_storage_dir = path.dirname(Configuration.GetFilePath("temp_microphone_storage"))
         for file in listdir(temp_storage_dir):
-            remove(os.path.join(path.dirname(self.__config.GetFilePath("temp_microphone_storage")), file))
+            remove(os.path.join(path.dirname(Configuration.GetFilePath("temp_microphone_storage")), file))
 
     def getInput(self, phrase_time_limit: float = 5) -> str:
         """
@@ -59,27 +58,23 @@ class Audio:
         :return: None
         """
         self.__output_stack.append(text)
-        base_dir = path.dirname(self.__config.GetFilePath("temp_microphone_storage"))
-        output_path = self.__config.GetFilePath("temp_microphone_storage").format(audio_id=len([file for file in
+        base_dir = path.dirname(Configuration.GetFilePath("temp_microphone_storage"))
+        output_path = Configuration.GetFilePath("temp_microphone_storage").format(audio_id=len([file for file in
                                                                                                 listdir(base_dir) if
                                                                                                 path.isfile(
                                                                                                     path.join(base_dir,
                                                                                                               file))]))
 
-        language = self.__config.Get("language")
+        language = Configuration.Get("language")
         out = gTTS(text, lang=language)
         out.save(output_path)
-
-    """
-        Stack based to avoid intertwining audio
-    """
 
     def __outputHandler(self) -> None:
         """
         Output handling thread
         :return: None
         """
-        base_dir = path.dirname(self.__config.GetFilePath("temp_microphone_storage"))
+        base_dir = path.dirname(Configuration.GetFilePath("temp_microphone_storage"))
 
         while True:
             for file in [path.join(base_dir, file) for file in listdir(base_dir) if

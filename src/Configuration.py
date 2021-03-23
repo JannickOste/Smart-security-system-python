@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import os, face_recognition
 from xml.dom import minidom
 
@@ -12,46 +13,74 @@ class Configuration:
     __config = None
     __known_encodings = {}
 
-    def __init__(self):
+    @classmethod
+    def __init__(cls):
         print("Loading assets...")
-        self.__config = minidom.parse(os.path.join(self.__AssetPath(), "configuration.xml"))
+        cls.__config = minidom.parse(os.path.join(cls.__AssetPath(), "configuration.xml"))
 
-        face_dir = self.GetFilePath("know_face_encodings")
+        face_dir = cls.GetFilePath("know_face_encodings")
+
         for directory in [directory for directory in os.listdir(face_dir) if os.path.isdir(os.path.join(face_dir, directory))]:
-            self.__known_encodings[directory] = []
-            for file in os.listdir(os.path.join(face_dir, directory)):
-                image = cv2.cvtColor(face_recognition.load_image_file(os.path.join(face_dir, directory, file)), cv2.COLOR_BGR2RGB)
-                encoding = face_recognition.face_encodings(image)
+            if directory.lower() != "unkown":
+                cls.__known_encodings[directory] = []
+                failed = 0
+                for file in os.listdir(os.path.join(face_dir, directory)):
+                    file_path = os.path.join(face_dir, directory, file)
+                    image = cv2.cvtColor(face_recognition.load_image_file(file_path), cv2.COLOR_BGR2RGB)
+                    encoding = face_recognition.face_encodings(image)
 
-                if encoding:
-                    self.__known_encodings[directory].append(encoding[0])
+                    if encoding:
+                        cls.__known_encodings[directory].append(encoding[0])
+                    else:
+                        os.remove(file_path)
+                        failed += 1
 
-    @property
-    def projectRoot(self) -> str:
+                print(f"[Configuration]: Loaded encodings for the user: {directory} "
+                      f"(success: {len(cls.__known_encodings[directory])} / failed: {failed})")
+
+                if failed > 0:
+                    print("[Configuration]: Restructuring map")
+                    offset = 0
+                    for file_id, file in enumerate(os.listdir(os.path.join(face_dir, directory))):
+                        while True:
+                            try:
+                                os.rename(os.path.join(face_dir, directory, file), os.path.join(face_dir, directory, f"{file_id+offset}.png"))
+                                break
+                            except FileExistsError:
+                                offset += 1
+
+
+
+    @classmethod
+    def projectRoot(cls) -> str:
         return os.path.dirname(os.path.abspath(__file__))[:-4]
 
-    def __AssetPath(self) -> str:
-        return f"{self.projectRoot}\\Assets"
+    @classmethod
+    def __AssetPath(cls) -> str:
+        return f"{cls.projectRoot()}\\Assets"
 
-    def Get(self, key: str) -> str:
-        for val in self.__config.getElementsByTagName("value"):
+    @classmethod
+    def Get(cls, key: str) -> str:
+        for val in cls.__config.getElementsByTagName("value"):
             if key == val.attributes["name"].value:
                 return val.attributes["value"].value
 
         return ""
 
-    def GetFilePath(self, key: str) -> str:
-        for val in self.__config.getElementsByTagName("path"):
+    @classmethod
+    def GetFilePath(cls, key: str) -> str:
+        for val in cls.__config.getElementsByTagName("path"):
             if key == val.attributes["name"].value:
-                return f"{self.__AssetPath()}\\{val.attributes['value'].value}".replace("/", "\\")
+                return f"{cls.__AssetPath()}\\{val.attributes['value'].value}".replace("/", "\\")
 
         return ""
 
-    def enabledModules(self):
-        for module_element in self.__config.getElementsByTagName("module"):
+    @classmethod
+    def enabledModules(cls):
+        for module_element in cls.__config.getElementsByTagName("module"):
             if module_element.attributes["enabled"].value.lower() == "true":
                 yield module_element.attributes["name"].value
 
-    @property
-    def known_encodings(self):
-        return self.__known_encodings
+    @classmethod
+    def known_encodings(cls):
+        return cls.__known_encodings

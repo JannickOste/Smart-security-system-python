@@ -1,34 +1,34 @@
 import os
 import re
+import imutils
 from datetime import datetime
 
 import numpy
+from  PIL import Image
 from typing import Union
 
 import cv2
 import face_recognition
 
+from src.Configuration import Configuration
+
 
 class Webcam:
     # Target camera and current rendered frames by camera
-    target_id = -1
+    target_id: int = -1
 
-    __target = None
-    __ret, __frame = None, None
-    __workers = []
+    __target: cv2.VideoCapture = None
+    __write_process: cv2.VideoWriter = None
+    __lastFrame: numpy.ndarray = None
+    __lastDetectedTime: datetime = None
 
-    # Write process if valid location is specified
-    __write_process = None, None
-    __faceTracking = False
+    __extractKnownFaces = False
 
-    __config = None
-
-    # Initiation procedure
-    def __init__(self, config,  target_id: int = 0) -> None:
+    def __init__(self, target_id: int = 0) -> None:
         """
         Initiate the camera capture and assign id for external access
         """
-        self.__config = config
+        self.__lastDetectedTime = datetime.now()
         self.target_id = target_id
         self.__target = cv2.VideoCapture(self.target_id, cv2.CAP_DSHOW)
 
@@ -39,7 +39,7 @@ class Webcam:
         """
 
         if render:
-            self.__render(self.__config.GetFilePath("video_output_location"))
+            self.__render(Configuration.GetFilePath("video_output_location"))
 
     def __render(self, output_location: str) -> None:
         """
@@ -49,13 +49,19 @@ class Webcam:
         """
 
         write_process = None
-        encodings = self.__config.known_encodings
+        encodings = Configuration.known_encodings()
         while self.__target.isOpened():
             # Read and assign current frame.
             render, frame = self.__target.read()
 
-            if self.__faceTracking:
-                write_process = self.__faceTrack(frame, encodings, write_process, output_location)
+            if self.__lastFrame is None:
+                self.__lastFrame = cv2.GaussianBlur(cv2.cvtColor(imutils.resize(frame, width=500), cv2.COLOR_BGR2GRAY), (21, 21), 0)
+                continue
+            try:
+                if self.__isMotion(frame) or ((datetime.now()-self.__lastDetectedTime).seconds < 5):
+                    write_process = self.__faceTrack(frame, encodings, write_process, output_location)
+            except Exception as e:
+                print(e)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 self.close()
             elif render:
@@ -63,13 +69,42 @@ class Webcam:
                 if write_process is not None:
                     write_process.write(frame)
 
-    def __faceTrack(self, frame, encodings, write_process, output_location):
+    def __isMotion(self, frame) -> bool:
+        """
+        Motion detection flag, if motion = facetrack
+        :param frame: current frame to check
+        :return: Frame difference within check
+        """
+        grayed_frame = cv2.GaussianBlur(cv2.cvtColor(imutils.resize(frame, width=500), cv2.COLOR_BGR2GRAY), (21, 21), 0)
+        delta = cv2.absdiff(self.__lastFrame, grayed_frame)
+        tresh = cv2.dilate(cv2.threshold(delta, 25,255, cv2.THRESH_BINARY)[1], None , iterations=2)
+        contours = imutils.grab_contours(cv2.findContours(tresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE))
+
+        try:
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if 100 < area and area > 500:
+                    continue
+                self.__lastFrame = grayed_frame
+                return True
+        except Exception as e:
+            print(e)
+        return False
+
+    def __faceTrack(self, frame, encodings, write_process, output_location) -> cv2.VideoWriter:
+        """
+        Track faces upon a frame
+        :param frame: target frame
+        :param encodings: known encodings
+        :param write_process: (un)active write process
+        :param output_location: output for writing process
+        :return: updated writing process
+        """
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         locations = face_recognition.face_locations(rgb_frame)
         found_names = []
 
         try:
-
             for encoding in face_recognition.face_encodings(rgb_frame, locations):
                 name = None
                 match = None
@@ -78,18 +113,31 @@ class Webcam:
                     if match[0]:
                         name = set_name
                         break
+                    self.__lastDetectedTime = datetime.now()
 
                 found_names.append(name)
+
         except Exception as e:
-            print(e)
+            print("Error parsing face name: ", e)
+
         try:
             for (top, right, bottom, left), name in zip(locations, found_names):
                 cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 0), 2)
                 cv2.rectangle(frame, (left, bottom), (right, bottom), (0, 0, 0), cv2.FILLED)
                 font = cv2.FONT_HERSHEY_DUPLEX
+                name = name if name is not None else "Unkown"
                 cv2.putText(frame, name, (left + 6, bottom - 6), font, 0.5, (255, 255, 255), 1)
+
+                if self.__extractKnownFaces:
+                    frame_slice = rgb_frame[top:bottom, left:right]
+                    file_path = os.path.join(Configuration.GetFilePath("know_face_encodings"), name)
+                    if not os.path.exists(file_path):
+                        os.mkdir(file_path)
+
+                    Image.fromarray(frame_slice).save(os.path.join(file_path, f"{len(os.listdir(file_path))}.png"))
+
         except Exception as e:
-            print(e)
+            print("Error setting face rect: ", e)
 
         if locations and write_process is None:
             try:
@@ -115,12 +163,6 @@ class Webcam:
         """
         return self.__target.read()
 
-    def setFrame(self, new_frame: numpy.ndarray) -> None:
-        """
-        Override current rendered frame
-        """
-        self.__frame = new_frame
-
     # Webcam is writing or showing.
     def isActive(self) -> bool:
         """
@@ -128,13 +170,6 @@ class Webcam:
         :return: camera is active
         """
         return self.__target.isOpened()
-
-    def toggleTracking(self) -> None:
-        """
-        Set face tracking true/false inverse of the current state
-        :return:
-        """
-        self.__faceTracking = not self.__faceTracking
 
     # Close the webcam renderer.
     def close(self) -> None:

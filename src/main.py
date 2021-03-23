@@ -3,7 +3,7 @@ from typing import Union
 import src.devices, src.classes
 from concurrent.futures import ThreadPoolExecutor
 
-from src import Configuration
+from src.Configuration import Configuration
 
 """
     @Todos: 
@@ -22,15 +22,16 @@ class Main:
 
     __audio: src.classes.SpeechHandler = None
     __video: src.classes.CameraHandler = None
-    __config: src.Configuration = Configuration.Configuration()
 
     def __init__(self) -> None:
         """
         Assign all device objects
         """
+        Configuration() # Initiate configuration
 
-        self.__audio = src.classes.SpeechHandler(self.__config)
-        self.__video = src.classes.CameraHandler(self.__config)
+        self.__audio = src.classes.SpeechHandler()
+        self.__video = src.classes.CameraHandler()
+
         self.__start()
 
     def __start(self) -> None:
@@ -48,15 +49,7 @@ class Main:
             self.__worker_threads.append(executor.submit(self.__update))
 
     def __update(self):
-        print("Asking question")
-        try:
-            self.__audio.askQuestion("System enabled sir, do you wish to enable face tracking?",
-                                     "Enabling face tracking",
-                                     "Sorry sir, i failed to understand you, i will just leave it as is",
-                                     ["yes", "oke"], getattr(self.__video, "toggleTracking"))
-
-        except Exception as e:
-            print(e)
+        pass
 
     # while any([not thread.done() for thread in self.__device_threads]):
     #     print("Running")

@@ -7,8 +7,8 @@ from src.devices import Audio
 class SpeechHandler:
     io = None
 
-    def __init__(self, config):
-        self.io = Audio(config)
+    def __init__(self):
+        self.io = Audio()
 
     def askQuestion(self, question: str, success: str, failed: str, valid_responses: Union, callback) -> None:
         self.io.setOutput(question)
