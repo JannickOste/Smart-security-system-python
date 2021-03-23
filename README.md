@@ -7,3 +7,4 @@
 How to enable facetracking ?:
  - Create a folder named as the target with face images of the target in ./Assets/FaceSet/
  - Ex: ./Assets/FaceSet/Oste Jannick/image0.png
+ - It should auto trigger now upon motion
